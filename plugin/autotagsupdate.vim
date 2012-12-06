@@ -20,6 +20,7 @@ import sys
 import vim
 import time
 import logging
+import tempfile
 from collections import defaultdict
 
 # global vim config variables used (all are g:AutoTagsUpdate_<name>):
@@ -201,7 +202,7 @@ class AutoTag:
 
 	def stripTags(self, tagsFile, sources):
 		LOGGER.info("Stripping tags for %s from tags file %s", ",".join(sources), tagsFile)
-		backup = ".SAFE"
+		backup = ".atu"
 		input = fileinput.FileInput(files=tagsFile, inplace=True, backup=backup)
 		try:
 			for l in input:
@@ -235,28 +236,33 @@ EEOOFF
 
 function! AutoTag()
 python << EEOOFF
-try:
-	pid = os.fork()
-except OSError, e:
-	sys.exit(1)
+lock = os.path.join(tempfile.gettempdir(), '.atu.lock');
 
-if pid<=0:
+if (not os.path.exists(lock)):
 	try:
 		pid = os.fork()
-		if pid>0:
-			sys.exit(0)
 	except OSError, e:
 		sys.exit(1)
-	os.setsid()
-	os.umask(0)
-	try:
-		if not vim_global("Disabled", bool):
-			at = AutoTag()
-			at.addSource(vim.eval("expand(\"%:p\")"))
-			at.rebuildTagFiles()
+
+	if pid<=0:
+		try:
+			pid = os.fork()
+			if pid>0:
+				sys.exit(0)
+		except OSError, e:
+			sys.exit(1)
+		os.setsid()
+		os.umask(0)
+		try:
+			if not vim_global("Disabled", bool):
+				open(lock, 'w').close()
+				at = AutoTag()
+				at.addSource(vim.eval("expand(\"%:p\")"))
+				at.rebuildTagFiles()
+				os.remove(lock);
+				sys.exit(0)
+		except:
 			sys.exit(0)
-	except:
-		sys.exit(0)
 EEOOFF
 	if exists(":TlistUpdate")
 		TlistUpdate
